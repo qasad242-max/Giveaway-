@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Get Your Coupon</title>
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%); height: 100vh; display: flex; justify-content: center; align-items: center; }
+        .card { background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.1); text-align: center; width: 90%; max-width: 400px; }
+        h1 { color: #2d3436; margin-top: 0; }
+        
+        .coupon-box { 
+            background: #ffeaa7; color: #d63031; padding: 20px; margin: 25px 0; 
+            font-size: 28px; font-weight: bold; border-radius: 12px; 
+            border: 2px dashed #fdcb6e; display: none; letter-spacing: 2px;
+        }
+        
+        button { 
+            background: #0984e3; color: white; border: none; padding: 18px 30px; 
+            font-size: 18px; border-radius: 50px; cursor: pointer; width: 100%; 
+            box-shadow: 0 5px 15px rgba(9, 132, 227, 0.3); transition: 0.3s; 
+        }
+        button:hover { transform: translateY(-3px); background: #74b9ff; }
+        button:disabled { background: #b2bec3; cursor: not-allowed; transform: none; box-shadow: none; }
+        
+        .footer { font-size: 12px; color: #636e72; margin-top: 20px; }
+        .loader { font-size: 14px; color: #888; font-style: italic; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h1>🎁 Free Coupon</h1>
+        
+        <div id="result" class="coupon-box">...</div>
+        
+        <button id="claimBtn" style="display:none;">Tap to Claim</button>
+        
+        <p class="loader" id="statusMsg">Connecting to server...</p>
+        <p class="footer">Server Load: Optimized ⚡</p>
+    </div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, get, update, child, query, orderByChild, equalTo, limitToFirst, runTransaction } 
+           from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBVd8VD0Gcf0skKGbowuxsPstEy0_3hUCg",
+        authDomain: "ruble-452dc.firebaseapp.com",
+        databaseURL: "https://ruble-452dc-default-rtdb.firebaseio.com",
+        projectId: "ruble-452dc",
+        storageBucket: "ruble-452dc.firebasestorage.app",
+        messagingSenderId: "533381698939",
+        appId: "1:533381698939:web:e2ea188d3b18f03fd319de",
+        measurementId: "G-B6GS1G8RJ1"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let currentEventID = "";
+
+    async function init() {
+        // Shared Link Check
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('ref')) {
+            showSharedView(urlParams.get('ref'));
+            return;
+        }
+
+        try {
+            // Get Event Name
+            const configRef = ref(db, 'site_config/active_event');
+            const snapshot = await get(configRef);
+            currentEventID = snapshot.val() || "EVENT_1"; 
+            document.getElementById('statusMsg').innerText = ""; 
+
+            checkUserStatus();
+        } catch (error) {
+            console.error(error);
+            document.getElementById('statusMsg').innerText = "High Traffic. Retrying...";
+            setTimeout(init, 2000); // Retry logic
+        }
+    }
+
+    function checkUserStatus() {
+        const localCode = localStorage.getItem('my_coupon_' + currentEventID);
+        if (localCode) {
+            showCoupon(localCode, "Welcome back! Your code:");
+            updateUrl(localCode);
+        } else {
+            document.getElementById('claimBtn').style.display = 'block';
+        }
+    }
+
+    // --- ⚡ HIGH TRAFFIC CLAIM LOGIC ---
+    document.getElementById('claimBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('claimBtn');
+        btn.disabled = true;
+        btn.innerText = "Finding Coupon...";
+
+        try {
+            // 1. QUERY: सिर्फ 1 Active Coupon मांगो (Download limit: 1)
+            const couponsRef = ref(db, 'coupons');
+            const activeQuery = query(couponsRef, orderByChild('status'), equalTo('active'), limitToFirst(1));
+            
+            const snapshot = await get(activeQuery);
+
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                const couponId = Object.keys(data)[0]; // ID मिल गई
+                const couponCode = data[couponId].code;
+
+                // 2. TRANSACTION: एक साथ 100 लोग सेम कूपन न उठा लें, इसलिए Transaction यूज़ करेंगे
+                const couponRef = ref(db, 'coupons/' + couponId);
+                
+                const result = await runTransaction(couponRef, (currentData) => {
+                    if (currentData && currentData.status === 'active') {
+                        currentData.status = 'used'; // Lock it
+                        return currentData;
+                    } else {
+                        return; // Abort if already taken
+                    }
+                });
+
+                if (result.committed) {
+                    // Success! Coupon is yours
+                    localStorage.setItem('my_coupon_' + currentEventID, couponCode);
+                    updateUrl(couponCode);
+                    showCoupon(couponCode, "Congrats! Here is your code:");
+                } else {
+                    // Failed (Someone else took it milliseconds ago)
+                    btn.innerText = "Traffic High... Retrying";
+                    setTimeout(() => { document.getElementById('claimBtn').click(); }, 500); // Auto Retry
+                }
+
+            } else {
+                alert("All coupons are claimed!");
+                btn.innerText = "Out of Stock";
+            }
+        } catch (error) {
+            console.error(error);
+            btn.disabled = false;
+            btn.innerText = "Retry";
+        }
+    });
+
+    function showCoupon(code, msg) {
+        document.getElementById('result').innerText = code;
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('claimBtn').style.display = 'none';
+        document.getElementById('statusMsg').innerText = msg;
+    }
+
+    function showSharedView(code) {
+        document.getElementById('result').innerText = code;
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('claimBtn').style.display = 'none';
+        document.getElementById('statusMsg').innerText = "Shared Coupon View";
+    }
+
+    function updateUrl(code) {
+        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?ref=' + code;
+        window.history.replaceState({path: newUrl}, '', newUrl);
+    }
+
+    init();
+</script>
+
+</body>
+</html>
