@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Live Firebase</title>
+    <style>
+        body { font-family: sans-serif; background-color: #1e272e; color: white; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: #485460; padding: 20px; border-radius: 10px; }
+        h1 { color: #00d2d3; border-bottom: 2px solid #00d2d3; padding-bottom: 10px; }
+        textarea { width: 100%; height: 150px; background: #d2dae2; color: #333; padding: 10px; border: none; font-family: monospace; }
+        button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; margin-top: 10px; }
+        .btn-save { background-color: #0be881; color: #1e272e; }
+        .btn-clear { background-color: #ff3f34; color: white; float: right; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: white; color: black; }
+        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+        .used { color: red; font-weight: bold; }
+        .active { color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🔥 Admin Panel (Live)</h1>
+    <p>Status: <span id="connectionStatus">Connecting...</span></p>
+
+    <div>
+        <h3>Bulk Upload</h3>
+        <textarea id="bulkInput" placeholder="OFFER-1&#10;OFFER-2&#10;OFFER-3"></textarea>
+        <br>
+        <button class="btn-save" id="uploadBtn">Upload to Firebase</button>
+        <button class="btn-clear" id="resetBtn">Delete All Data</button>
+    </div>
+
+    <h3>Live Coupon List</h3>
+    <table id="couponTable">
+        <thead><tr><th>Code</th><th>Status</th></tr></thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
+
+<script type="module">
+    // --- FIREBASE SETUP ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, push, onValue, remove, set } 
+           from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBVd8VD0Gcf0skKGbowuxsPstEy0_3hUCg",
+        authDomain: "ruble-452dc.firebaseapp.com",
+        databaseURL: "https://ruble-452dc-default-rtdb.firebaseio.com",
+        projectId: "ruble-452dc",
+        storageBucket: "ruble-452dc.firebasestorage.app",
+        messagingSenderId: "533381698939",
+        appId: "1:533381698939:web:e2ea188d3b18f03fd319de",
+        measurementId: "G-B6GS1G8RJ1"
+    };
+
+    // Initialize
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const couponsRef = ref(db, 'coupons');
+
+    document.getElementById('connectionStatus').innerText = "Connected ✅";
+
+    // --- UPLOAD FUNCTION ---
+    document.getElementById('uploadBtn').addEventListener('click', () => {
+        const text = document.getElementById('bulkInput').value;
+        if (!text.trim()) return alert("Enter coupons first!");
+
+        const lines = text.split('\n');
+        let count = 0;
+
+        lines.forEach(line => {
+            const code = line.trim().toUpperCase();
+            if (code) {
+                // Firebase me data push karna
+                push(couponsRef, {
+                    code: code,
+                    status: 'active'
+                });
+                count++;
+            }
+        });
+
+        alert(`${count} coupons uploaded!`);
+        document.getElementById('bulkInput').value = "";
+    });
+
+    // --- READ DATA (Realtime) ---
+    onValue(couponsRef, (snapshot) => {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = "";
+        const data = snapshot.val();
+
+        if (data) {
+            // Data ko object se array banana
+            Object.values(data).forEach(coupon => {
+                const row = `<tr>
+                    <td>${coupon.code}</td>
+                    <td class="${coupon.status}">${coupon.status === 'active' ? 'Available' : 'CLAIMED'}</td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+        } else {
+            tbody.innerHTML = "<tr><td colspan='2'>No coupons found in database.</td></tr>";
+        }
+    });
+
+    // --- DELETE ALL ---
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        if(confirm("DELETE EVERYTHING? This cannot be undone.")) {
+            remove(couponsRef);
+        }
+    });
+</script>
+
+</body>
+</html>
