@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Master Control</title>
+    <style>
+        body { font-family: sans-serif; background-color: #1e272e; color: white; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        
+        /* Section Styling */
+        .card { background: #485460; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 5px solid #00d2d3; }
+        .card.danger { border-left-color: #ff3f34; }
+        
+        h2 { margin-top: 0; color: #00d2d3; }
+        input, textarea { width: 100%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; }
+        button { padding: 10px 20px; cursor: pointer; border: none; border-radius: 5px; font-weight: bold; }
+        .btn-save { background: #0be881; color: #1e272e; }
+        .btn-update { background: #ffa801; color: #1e272e; }
+        .btn-clear { background: #ff3f34; color: white; }
+        
+        .status-box { background: #1e272e; padding: 10px; margin-top: 10px; color: #0be881; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🔥 Admin Master Control</h1>
+
+    <div class="card">
+        <h2>🛠️ Giveaway Settings (Reset for Users)</h2>
+        <p>नया गिवअवे शुरू करने के लिए यहाँ नाम बदलें (Example: <code>EVENT_2</code>, <code>HOLI_OFFER</code>)। नाम बदलते ही पुराने यूजर्स फिर से कूपन ले पाएंगे।</p>
+        
+        <label>Current Event Name:</label>
+        <input type="text" id="eventIdInput" placeholder="Enter Event Name (e.g. GIVEAWAY_MARCH)">
+        <button class="btn-update" id="updateEventBtn">Update Event Name</button>
+        <div id="eventStatus" class="status-box">Loading...</div>
+    </div>
+
+    <div class="card">
+        <h2>📤 Upload Coupons</h2>
+        <textarea id="bulkInput" rows="5" placeholder="CODE1&#10;CODE2&#10;CODE3"></textarea>
+        <button class="btn-save" id="uploadBtn">Upload Coupons</button>
+        <span id="uploadStatus" style="margin-left:10px;"></span>
+    </div>
+
+    <div class="card danger">
+        <h2>🗑️ Danger Zone</h2>
+        <button class="btn-clear" id="resetBtn">Delete ALL Coupons</button>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, push, onValue, set, remove } 
+           from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBVd8VD0Gcf0skKGbowuxsPstEy0_3hUCg",
+        authDomain: "ruble-452dc.firebaseapp.com",
+        databaseURL: "https://ruble-452dc-default-rtdb.firebaseio.com",
+        projectId: "ruble-452dc",
+        storageBucket: "ruble-452dc.firebasestorage.app",
+        messagingSenderId: "533381698939",
+        appId: "1:533381698939:web:e2ea188d3b18f03fd319de",
+        measurementId: "G-B6GS1G8RJ1"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // --- 1. MANAGE EVENT NAME ---
+    const configRef = ref(db, 'site_config/active_event');
+
+    // Load current name
+    onValue(configRef, (snapshot) => {
+        const val = snapshot.val() || "DEFAULT_EVENT";
+        document.getElementById('eventIdInput').value = val;
+        document.getElementById('eventStatus').innerText = "Active Event: " + val;
+    });
+
+    // Update name
+    document.getElementById('updateEventBtn').addEventListener('click', () => {
+        const newName = document.getElementById('eventIdInput').value.trim();
+        if(!newName) return alert("नाम खाली नहीं हो सकता!");
+        
+        set(configRef, newName).then(() => {
+            alert("Event Name Updated! अब यूजर्स को नया गिवअवे दिखेगा।");
+        });
+    });
+
+    // --- 2. UPLOAD COUPONS ---
+    document.getElementById('uploadBtn').addEventListener('click', () => {
+        const text = document.getElementById('bulkInput').value;
+        if (!text.trim()) return alert("Enter coupons first!");
+
+        const lines = text.split('\n');
+        let count = 0;
+        const couponsRef = ref(db, 'coupons');
+
+        lines.forEach(line => {
+            const code = line.trim().toUpperCase();
+            if (code) {
+                push(couponsRef, { code: code, status: 'active' });
+                count++;
+            }
+        });
+
+        document.getElementById('uploadStatus').innerText = `${count} Uploaded!`;
+        document.getElementById('bulkInput').value = "";
+    });
+
+    // --- 3. DELETE ALL ---
+    document.getElementById('resetBtn').addEventListener('click', () => {
+        if(confirm("Sare coupons delete ho jayenge. Confirm?")) {
+            remove(ref(db, 'coupons'));
+            document.getElementById('uploadStatus').innerText = "All deleted.";
+        }
+    });
+
+</script>
+</body>
+</html>
