@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exclusive Giveaway</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background: #0f0c29;  /* fallback for old browsers */
+            background: -webkit-linear-gradient(to right, #24243e, #302b63, #0f0c29);  /* Chrome 10-25, Safari 5.1-6 */
+            background: linear-gradient(to right, #24243e, #302b63, #0f0c29); /* W3C, IE 10+/ Edge, Firefox 16+, Chrome 26+, Opera 12+, Safari 7+ */
+            color: white; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            margin: 0; 
+        }
+        .card { 
+            background: rgba(255, 255, 255, 0.1); 
+            backdrop-filter: blur(10px);
+            padding: 40px; 
+            border-radius: 20px; 
+            text-align: center; 
+            max-width: 400px; 
+            width: 90%; 
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        h1 { margin-top: 0; color: #00d2ff; text-shadow: 0 0 10px rgba(0,210,255,0.5); }
+        
+        .coupon-box { 
+            font-size: 32px; 
+            color: #00ff88; 
+            margin: 25px 0; 
+            font-weight: bold; 
+            border: 2px dashed #00ff88; 
+            padding: 20px; 
+            border-radius: 10px;
+            display: none; 
+            letter-spacing: 2px;
+            background: rgba(0,0,0,0.3);
+        }
+        
+        button { 
+            background: linear-gradient(90deg, #00d2ff 0%, #3a7bd5 100%);
+            color: white; 
+            border: none; 
+            padding: 18px 30px; 
+            font-size: 20px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            width: 100%; 
+            border-radius: 50px; 
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 5px 15px rgba(0, 210, 255, 0.4);
+        }
+        
+        button:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0, 210, 255, 0.6); }
+        button:active { transform: scale(0.98); }
+        button:disabled { background: #555; cursor: not-allowed; box-shadow: none; transform: none; }
+        
+        .status { margin-top: 20px; font-size: 14px; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h1>⚡ Flash Giveaway</h1>
+        <p>Click below to claim your unique code.</p>
+        
+        <div id="result" class="coupon-box"></div>
+        
+        <button id="claimBtn">CLAIM REWARD</button>
+        
+        <p id="msg" class="status">Waiting for user...</p>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        // जब भी नया इवेंट हो, इसे बदल देना (Admin Panel में भी यही रखना)
+        const EVENT_ID = "GIVEAWAY_DEC_2025"; 
+        // ---------------------
+
+        // User Identity (Local Storage)
+        let userId = localStorage.getItem('unique_uid');
+        if (!userId) {
+            userId = 'user_' + Math.random().toString(36).substr(2, 9);
+            localStorage.setItem('unique_uid', userId);
+        }
+
+        document.getElementById('claimBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('claimBtn');
+            const msg = document.getElementById('msg');
+            
+            btn.disabled = true;
+            btn.innerText = "Processing...";
+            msg.innerText = "Connecting to secure server...";
+
+            try {
+                // Vercel Backend Call
+                const response = await fetch('/api/claim', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ eventId: EVENT_ID, userId: userId })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showCoupon(data.coupon);
+                    msg.innerText = data.message === 'Already Claimed' ? "Welcome back!" : "Success! Code Generated.";
+                } else if (data.error === 'Sold Out') {
+                    btn.innerText = "SOLD OUT";
+                    btn.style.background = "#ff4444";
+                    msg.innerText = "Sorry, all coupons are gone.";
+                } else {
+                    throw new Error('Server Error');
+                }
+
+            } catch (error) {
+                console.error(error);
+                btn.innerText = "Retry";
+                btn.disabled = false;
+                msg.innerText = "Network Busy. Please try again.";
+            }
+        });
+
+        function showCoupon(code) {
+            document.getElementById('result').innerText = code;
+            document.getElementById('result').style.display = 'block';
+            document.getElementById('claimBtn').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
