@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exclusive Reward</title>
+    <style>
+        body { margin: 0; font-family: 'Segoe UI', sans-serif; background: linear-gradient(120deg, #89f7fe 0%, #66a6ff 100%); height: 100vh; display: flex; justify-content: center; align-items: center; }
+        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); text-align: center; width: 90%; max-width: 380px; }
+        h1 { color: #0061ff; margin-top: 0; font-size: 24px; }
+        .coupon-box { background: #2d3436; color: #fab1a0; padding: 15px; margin: 20px 0; font-size: 24px; font-weight: bold; border-radius: 8px; border: 2px dashed #e17055; display: none; }
+        
+        button { background: #0061ff; color: white; border: none; padding: 15px 30px; font-size: 16px; border-radius: 50px; cursor: pointer; width: 100%; transition: 0.3s; margin-top: 10px; }
+        button:disabled { background: #b2bec3; cursor: not-allowed; }
+        
+        /* Proof Section Styles */
+        .proof-section { background: #fff3cd; border: 1px solid #ffeeba; padding: 15px; border-radius: 8px; margin-bottom: 15px; display: none; text-align: left; }
+        .proof-section h3 { margin: 0 0 10px 0; color: #856404; font-size: 16px; }
+        .proof-section p { font-size: 12px; margin: 0 0 10px 0; color: #856404; }
+        input[type="file"] { font-size: 12px; width: 100%; }
+        
+        .loader { font-size: 12px; color: #666; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h1 id="title">🎁 Giveaway Event</h1>
+        
+        <div id="result" class="coupon-box">...</div>
+
+        <div id="proofContainer" class="proof-section">
+            <h3>📸 Verification Required</h3>
+            <p>You won in the last event! To participate again, please upload a screenshot of your previous coupon.</p>
+            <input type="file" id="proofFile" accept="image/*">
+        </div>
+        
+        <button id="claimBtn" style="display:none;">Check Availability</button>
+        
+        <p class="loader" id="statusMsg">Connecting...</p>
+    </div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getDatabase, ref, get, update, child } 
+           from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBVd8VD0Gcf0skKGbowuxsPstEy0_3hUCg",
+        authDomain: "ruble-452dc.firebaseapp.com",
+        databaseURL: "https://ruble-452dc-default-rtdb.firebaseio.com",
+        projectId: "ruble-452dc",
+        storageBucket: "ruble-452dc.firebasestorage.app",
+        messagingSenderId: "533381698939",
+        appId: "1:533381698939:web:e2ea188d3b18f03fd319de",
+        measurementId: "G-B6GS1G8RJ1"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    let currentEventID = "";
+    let previousEventID = "";
+
+    // --- INIT ---
+    async function init() {
+        // Shared Link Check
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('ref')) {
+            showSharedView(urlParams.get('ref'));
+            return;
+        }
+
+        try {
+            // Get Config from DB
+            const dbRef = ref(db, 'site_config');
+            const snapshot = await get(dbRef);
+            const config = snapshot.val() || {};
+
+            currentEventID = config.active_event || "DEFAULT";
+            previousEventID = config.required_proof_event || ""; // Admin ने जो सेट किया
+
+            document.getElementById('statusMsg').innerText = "Event: " + currentEventID;
+            
+            checkUserEligibility();
+
+        } catch (error) {
+            console.error(error);
+            document.getElementById('statusMsg').innerText = "Connection Error";
+        }
+    }
+
+    function checkUserEligibility() {
+        // 1. Check if user already claimed THIS event coupon
+        const currentCoupon = localStorage.getItem('my_coupon_' + currentEventID);
+        if (currentCoupon) {
+            showCoupon(currentCoupon, "You already claimed this!");
+            return;
+        }
+
+        // 2. PROOF CHECK LOGIC
+        // क्या Admin ने कोई पुराना इवेंट सेट किया है?
+        if (previousEventID) {
+            // क्या यूजर के पास उस पुराने इवेंट का कूपन है?
+            const hadPreviousWin = localStorage.getItem('my_coupon_' + previousEventID);
+            
+            if (hadPreviousWin) {
+                // यूजर पुराना विनर है -> Proof मांगो
+                document.getElementById('proofContainer').style.display = 'block';
+                document.getElementById('claimBtn').style.display = 'block';
+                document.getElementById('claimBtn').innerText = "Upload Proof First";
+                document.getElementById('claimBtn').disabled = true; // Button Lock
+
+                // File Select Listener
+                document.getElementById('proofFile').addEventListener('change', function() {
+                    if (this.files && this.files[0]) {
+                        document.getElementById('claimBtn').disabled = false;
+                        document.getElementById('claimBtn').innerText = "Claim Now";
+                        document.getElementById('claimBtn').style.background = "#2ecc71";
+                    }
+                });
+            } else {
+                // यूजर ने पिछला नहीं जीता था -> Normal Flow
+                showNormalClaimButton();
+            }
+        } else {
+            // Admin ने कोई प्रूफ नहीं माँगा -> Normal Flow
+            showNormalClaimButton();
+        }
+    }
+
+    function showNormalClaimButton() {
+        document.getElementById('claimBtn').style.display = 'block';
+        document.getElementById('claimBtn').innerText = "Claim Coupon";
+    }
+
+    // --- CLAIM FUNCTION ---
+    document.getElementById('claimBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('claimBtn');
+        btn.disabled = true;
+        btn.innerText = "Processing...";
+
+        try {
+            const dbRef = ref(db);
+            const snapshot = await get(child(dbRef, `coupons`));
+            
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+                let foundId = null, foundCode = null;
+
+                for (const key in data) {
+                    if (data[key].status === 'active') {
+                        foundId = key; foundCode = data[key].code; break;
+                    }
+                }
+
+                if (foundId) {
+                    // Update DB
+                    const updates = {};
+                    updates['/coupons/' + foundId + '/status'] = 'used';
+                    await update(ref(db), updates);
+
+                    // Save Local
+                    localStorage.setItem('my_coupon_' + currentEventID, foundCode);
+                    
+                    // URL Update
+                    const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?ref=' + foundCode;
+                    window.history.replaceState({path: newUrl}, '', newUrl);
+
+                    // UI Update
+                    document.getElementById('proofContainer').style.display = 'none'; // Hide proof box
+                    showCoupon(foundCode, "Congratulations! Code:");
+                } else {
+                    alert("Sold Out!");
+                    btn.innerText = "Sold Out";
+                }
+            } else {
+                alert("No active coupons.");
+                btn.disabled = false;
+                btn.innerText = "Try Again";
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Error.");
+            btn.disabled = false;
+        }
+    });
+
+    function showCoupon(code, msg) {
+        document.getElementById('result').innerText = code;
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('statusMsg').innerText = msg;
+        document.getElementById('claimBtn').style.display = 'none';
+        document.getElementById('proofContainer').style.display = 'none';
+    }
+
+    function showSharedView(code) {
+        document.getElementById('result').innerText = code;
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('statusMsg').innerText = "Shared Coupon View";
+        document.getElementById('title').innerText = "Claimed Coupon";
+    }
+
+    init();
+</script>
+
+</body>
+</html>
